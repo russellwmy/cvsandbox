@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import cv
+import numpy
+from scipy.cluster.vq import *
 
 class Target:
 
@@ -17,7 +19,8 @@ class Target:
         moving_average = cv.CreateImage(cv.GetSize(frame), cv.IPL_DEPTH_32F, 3)
 
         first = True
-
+        detected = []
+        
         while True:
             closest_to_left = cv.GetSize(frame)[0]
             closest_to_right = cv.GetSize(frame)[1]
@@ -25,7 +28,7 @@ class Target:
             color_image = cv.QueryFrame(self.capture)
 
             # Smooth to get rid of false positives
-            cv.Smooth(color_image, color_image, cv.CV_GAUSSIAN, 3, 0)
+            cv.Smooth(color_image, color_image, cv.CV_GAUSSIAN, 5, 0)
 
             if first:
                 difference = cv.CloneImage(color_image)
@@ -54,7 +57,6 @@ class Target:
             storage = cv.CreateMemStorage(0)
             contour = cv.FindContours(grey_image, storage, cv.CV_RETR_CCOMP, cv.CV_CHAIN_APPROX_SIMPLE)
             points = []
-
             while contour:
                 bound_rect = cv.BoundingRect(list(contour))
                 contour = contour.h_next()
@@ -63,16 +65,29 @@ class Target:
                 pt2 = (bound_rect[0] + bound_rect[2], bound_rect[1] + bound_rect[3])
                 points.append(pt1)
                 points.append(pt2)
-                cv.Rectangle(color_image, pt1, pt2, cv.CV_RGB(255,0,0), 1)
+                # cv.Rectangle(color_image, pt1, pt2, cv.CV_RGB(255,0,0), 1)
 
+                
             if len(points):
-                center_point = reduce(lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), points)
-                cv.Circle(color_image, center_point, 40, cv.CV_RGB(255, 255, 255), 1)
-                cv.Circle(color_image, center_point, 30, cv.CV_RGB(255, 100, 0), 1)
-                cv.Circle(color_image, center_point, 20, cv.CV_RGB(255, 255, 255), 1)
-                cv.Circle(color_image, center_point, 10, cv.CV_RGB(255, 100, 0), 1)
+                try:
+                    res, idx = kmeans2(numpy.asarray(points),2)
+                    detected = []
+                    detected.append([res[0][0], res[0][1]])
+                    for i, item1 in enumerate(res):
+                        for item2 in  res[i:]:
+                            dist = numpy.sqrt(numpy.sum((item1-item2)**2))
+                            if dist > 100 and [item2[0], item2[1]] not in detected :
+                                detected.append([item2[0], item2[1]])
+                except:
+                    pass
+                for item in detected:
+                    x = int(item[0])
+                    y = int(item[1])
+                    cv.Circle(color_image, (x,y), 50, cv.CV_RGB(255, 100, 0), 1)
+                print len(detected)
+                
 
-            cv.ShowImage("Target", color_image)
+            cv.ShowImage("Target", grey_image)
 
             # Listen for ESC key
             c = cv.WaitKey(7) % 0x100
@@ -82,3 +97,4 @@ class Target:
 if __name__=="__main__":
     t = Target()
     t.run()
+    
